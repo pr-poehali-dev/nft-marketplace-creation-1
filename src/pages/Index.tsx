@@ -10,9 +10,12 @@ import { Switch } from '@/components/ui/switch';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 
+const API_URL = 'https://functions.poehali.dev/dd412e45-0e97-4737-9d07-6ab596b9b773';
+
 interface User {
   id: number;
   email: string;
+  nickname?: string;
   balance: number;
 }
 
@@ -38,6 +41,8 @@ const translations = {
     logout: 'Выйти',
     email: 'Email',
     password: 'Пароль',
+    newPassword: 'Новый пароль',
+    nickname: 'Никнейм',
     balance: 'Баланс',
     topup: 'Пополнить',
     uploadNFT: 'Загрузить NFT',
@@ -59,6 +64,17 @@ const translations = {
     uploadCost: 'Стоимость загрузки: 15 энефтиксов',
     notEnoughBalance: 'Недостаточно энефтиксов',
     loginRequired: 'Войдите в систему',
+    verificationCode: 'Код подтверждения',
+    verify: 'Подтвердить',
+    forgotPassword: 'Забыли пароль?',
+    resetPassword: 'Сбросить пароль',
+    sendCode: 'Отправить код',
+    verifyEmail: 'Подтвердите email',
+    enterCode: 'Введите код из письма',
+    updateNickname: 'Изменить никнейм',
+    save: 'Сохранить',
+    optional: 'необязательно',
+    paymentInfo: 'После ввода данных карты средства будут обработаны платёжной системой',
   },
   en: {
     home: 'Home',
@@ -71,6 +87,8 @@ const translations = {
     logout: 'Logout',
     email: 'Email',
     password: 'Password',
+    newPassword: 'New Password',
+    nickname: 'Nickname',
     balance: 'Balance',
     topup: 'Top Up',
     uploadNFT: 'Upload NFT',
@@ -92,6 +110,17 @@ const translations = {
     uploadCost: 'Upload cost: 15 eneftix',
     notEnoughBalance: 'Not enough eneftix',
     loginRequired: 'Please login',
+    verificationCode: 'Verification Code',
+    verify: 'Verify',
+    forgotPassword: 'Forgot Password?',
+    resetPassword: 'Reset Password',
+    sendCode: 'Send Code',
+    verifyEmail: 'Verify Email',
+    enterCode: 'Enter code from email',
+    updateNickname: 'Update Nickname',
+    save: 'Save',
+    optional: 'optional',
+    paymentInfo: 'After entering card details, funds will be processed by payment system',
   },
 };
 
@@ -103,6 +132,11 @@ export default function Index() {
   const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [loginOpen, setLoginOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [nicknameDialogOpen, setNicknameDialogOpen] = useState(false);
 
   const t = translations[language];
 
@@ -114,19 +148,144 @@ export default function Index() {
     }
   }, [isDark]);
 
-  const handleLogin = (email: string, password: string) => {
-    if (email && password) {
-      setCurrentUser({ id: 1, email, balance: 0 });
-      setLoginOpen(false);
-      toast.success(language === 'ru' ? 'Вход выполнен' : 'Logged in successfully');
+  const handleRegister = async (email: string, password: string, nickname: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', email, password, nickname: nickname || null }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setPendingUserId(data.user_id);
+        setRegisterOpen(false);
+        setVerifyOpen(true);
+        toast.success(
+          language === 'ru' 
+            ? `Код подтверждения: ${data.verification_code}` 
+            : `Verification code: ${data.verification_code}`
+        );
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка регистрации' : 'Registration error');
     }
   };
 
-  const handleRegister = (email: string, password: string) => {
-    if (email && password) {
-      setCurrentUser({ id: 1, email, balance: 0 });
-      setRegisterOpen(false);
-      toast.success(language === 'ru' ? 'Регистрация успешна' : 'Registration successful');
+  const handleVerify = async (code: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', user_id: pendingUserId, code }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setVerifyOpen(false);
+        toast.success(language === 'ru' ? 'Email подтверждён! Теперь войдите' : 'Email verified! Please login');
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка верификации' : 'Verification error');
+    }
+  };
+
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', email, password }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setCurrentUser(data.user);
+        setLoginOpen(false);
+        toast.success(language === 'ru' ? 'Вход выполнен' : 'Logged in successfully');
+      } else if (response.status === 403) {
+        setPendingUserId(data.user_id);
+        setLoginOpen(false);
+        setVerifyOpen(true);
+        toast.error(language === 'ru' ? 'Подтвердите email' : 'Please verify email');
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка входа' : 'Login error');
+    }
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'forgot_password', email }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setPendingUserId(data.user_id);
+        setForgotPasswordOpen(false);
+        setResetPasswordOpen(true);
+        toast.success(
+          language === 'ru'
+            ? `Код для сброса: ${data.reset_code}`
+            : `Reset code: ${data.reset_code}`
+        );
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка' : 'Error');
+    }
+  };
+
+  const handleResetPassword = async (code: string, newPassword: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_password', user_id: pendingUserId, code, new_password: newPassword }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setResetPasswordOpen(false);
+        toast.success(language === 'ru' ? 'Пароль изменён' : 'Password reset');
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка' : 'Error');
+    }
+  };
+
+  const handleUpdateNickname = async (nickname: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_nickname', user_id: currentUser.id, nickname }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setCurrentUser({ ...currentUser, nickname: data.nickname });
+        setNicknameDialogOpen(false);
+        toast.success(language === 'ru' ? 'Никнейм обновлён' : 'Nickname updated');
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка' : 'Error');
     }
   };
 
@@ -246,6 +405,17 @@ export default function Index() {
                         <Button type="submit" className="w-full">
                           {t.login}
                         </Button>
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="w-full"
+                          onClick={() => {
+                            setLoginOpen(false);
+                            setForgotPasswordOpen(true);
+                          }}
+                        >
+                          {t.forgotPassword}
+                        </Button>
                       </div>
                     </form>
                   </DialogContent>
@@ -268,7 +438,8 @@ export default function Index() {
                         const formData = new FormData(e.currentTarget);
                         handleRegister(
                           formData.get('email') as string,
-                          formData.get('password') as string
+                          formData.get('password') as string,
+                          formData.get('nickname') as string
                         );
                       }}
                     >
@@ -281,8 +452,95 @@ export default function Index() {
                           <Label htmlFor="register-password">{t.password}</Label>
                           <Input id="register-password" name="password" type="password" required />
                         </div>
+                        <div>
+                          <Label htmlFor="register-nickname">{t.nickname} ({t.optional})</Label>
+                          <Input id="register-nickname" name="nickname" />
+                        </div>
                         <Button type="submit" className="w-full">
                           {t.register}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t.verifyEmail}</DialogTitle>
+                      <DialogDescription>{t.enterCode}</DialogDescription>
+                    </DialogHeader>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+                        handleVerify(formData.get('code') as string);
+                      }}
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="verify-code">{t.verificationCode}</Label>
+                          <Input id="verify-code" name="code" required maxLength={6} />
+                        </div>
+                        <Button type="submit" className="w-full">
+                          {t.verify}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t.forgotPassword}</DialogTitle>
+                    </DialogHeader>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+                        handleForgotPassword(formData.get('email') as string);
+                      }}
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="forgot-email">{t.email}</Label>
+                          <Input id="forgot-email" name="email" type="email" required />
+                        </div>
+                        <Button type="submit" className="w-full">
+                          {t.sendCode}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t.resetPassword}</DialogTitle>
+                    </DialogHeader>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+                        handleResetPassword(
+                          formData.get('code') as string,
+                          formData.get('newPassword') as string
+                        );
+                      }}
+                    >
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="reset-code">{t.verificationCode}</Label>
+                          <Input id="reset-code" name="code" required maxLength={6} />
+                        </div>
+                        <div>
+                          <Label htmlFor="reset-password">{t.newPassword}</Label>
+                          <Input id="reset-password" name="newPassword" type="password" required />
+                        </div>
+                        <Button type="submit" className="w-full">
+                          {t.resetPassword}
                         </Button>
                       </div>
                     </form>
@@ -413,9 +671,10 @@ export default function Index() {
               <div className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>{currentUser.email}</CardTitle>
+                    <CardTitle>{currentUser.nickname || currentUser.email}</CardTitle>
+                    <CardDescription>{currentUser.email}</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-lg">{t.balance}:</span>
                       <div className="flex items-center gap-2">
@@ -423,17 +682,17 @@ export default function Index() {
                         <span className="text-3xl font-bold">{currentUser.balance}</span>
                       </div>
                     </div>
+                    <Button variant="outline" onClick={() => setNicknameDialogOpen(true)} className="w-full">
+                      <Icon name="Edit" className="mr-2 h-4 w-4" />
+                      {t.updateNickname}
+                    </Button>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
                     <CardTitle>{t.topup}</CardTitle>
-                    <CardDescription>
-                      {language === 'ru'
-                        ? '1 энефтикс = 10 рублей. Средства переводятся на карту Т-Банка 2200701206723980'
-                        : '1 eneftix = 10 rubles. Funds are transferred to T-Bank card 2200701206723980'}
-                    </CardDescription>
+                    <CardDescription>{t.paymentInfo}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <form
@@ -463,6 +722,36 @@ export default function Index() {
                 </Card>
               </div>
             )}
+
+            <Dialog open={nicknameDialogOpen} onOpenChange={setNicknameDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t.updateNickname}</DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    handleUpdateNickname(formData.get('nickname') as string);
+                  }}
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="new-nickname">{t.nickname}</Label>
+                      <Input
+                        id="new-nickname"
+                        name="nickname"
+                        defaultValue={currentUser?.nickname || ''}
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      {t.save}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 
@@ -472,14 +761,12 @@ export default function Index() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {language === 'ru'
-                    ? 'Напишите в поддержку'
-                    : 'Contact Support'}
+                  {language === 'ru' ? 'Напишите в поддержку' : 'Contact Support'}
                 </CardTitle>
                 <CardDescription>
                   {language === 'ru'
-                    ? 'Отправьте сообщение владельцу (chozadushchoutotakoe10@gmail.com)'
-                    : 'Send a message to the owner (chozadushchoutotakoe10@gmail.com)'}
+                    ? 'Отправьте сообщение администрации сайта'
+                    : 'Send a message to site administration'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
