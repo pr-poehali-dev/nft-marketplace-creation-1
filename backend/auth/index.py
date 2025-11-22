@@ -227,6 +227,42 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                         'body': json.dumps({'success': True, 'nickname': nickname})
                     }
+            
+            elif action == 'verify_with_password':
+                user_id = body_data.get('user_id')
+                password = body_data.get('password')
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT id, email, nickname, balance, password_hash FROM users WHERE id = %s",
+                        (user_id,)
+                    )
+                    user = cur.fetchone()
+                    
+                    if not user or user['password_hash'] != password_hash:
+                        return {
+                            'statusCode': 401,
+                            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                            'body': json.dumps({'error': 'Invalid password'})
+                        }
+                    
+                    cur.execute("UPDATE users SET is_verified = true WHERE id = %s", (user_id,))
+                    conn.commit()
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({
+                            'success': True,
+                            'user': {
+                                'id': user['id'],
+                                'email': user['email'],
+                                'nickname': user['nickname'],
+                                'balance': user['balance']
+                            }
+                        })
+                    }
         
         return {
             'statusCode': 405,

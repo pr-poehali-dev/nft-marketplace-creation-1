@@ -66,6 +66,9 @@ const translations = {
     loginRequired: 'Войдите в систему',
     verificationCode: 'Код подтверждения',
     verify: 'Подтвердить',
+    noCode: 'Не приходит код?',
+    usePassword: 'Войти с паролем',
+    enterPasswordToVerify: 'Введите пароль для подтверждения',
     forgotPassword: 'Забыли пароль?',
     resetPassword: 'Сбросить пароль',
     sendCode: 'Отправить код',
@@ -112,6 +115,9 @@ const translations = {
     loginRequired: 'Please login',
     verificationCode: 'Verification Code',
     verify: 'Verify',
+    noCode: 'Code not received?',
+    usePassword: 'Login with password',
+    enterPasswordToVerify: 'Enter password to verify',
     forgotPassword: 'Forgot Password?',
     resetPassword: 'Reset Password',
     sendCode: 'Send Code',
@@ -136,6 +142,8 @@ export default function Index() {
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [pendingPassword, setPendingPassword] = useState<string>('');
+  const [verifyMode, setVerifyMode] = useState<'code' | 'password'>('code');
   const [nicknameDialogOpen, setNicknameDialogOpen] = useState(false);
 
   const t = translations[language];
@@ -159,6 +167,8 @@ export default function Index() {
       
       if (response.ok) {
         setPendingUserId(data.user_id);
+        setPendingPassword(password);
+        setVerifyMode('code');
         setRegisterOpen(false);
         setVerifyOpen(true);
         toast.success(
@@ -194,6 +204,27 @@ export default function Index() {
     }
   };
 
+  const handleVerifyWithPassword = async (password: string) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify_with_password', user_id: pendingUserId, password }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setCurrentUser(data.user);
+        setVerifyOpen(false);
+        toast.success(language === 'ru' ? 'Вход выполнен успешно!' : 'Logged in successfully!');
+      } else {
+        toast.error(data.error);
+      }
+    } catch (error) {
+      toast.error(language === 'ru' ? 'Ошибка верификации' : 'Verification error');
+    }
+  };
+
   const handleLogin = async (email: string, password: string) => {
     try {
       const response = await fetch(API_URL, {
@@ -209,6 +240,8 @@ export default function Index() {
         toast.success(language === 'ru' ? 'Вход выполнен' : 'Logged in successfully');
       } else if (response.status === 403) {
         setPendingUserId(data.user_id);
+        setPendingPassword(password);
+        setVerifyMode('code');
         setLoginOpen(false);
         setVerifyOpen(true);
         toast.error(language === 'ru' ? 'Подтвердите email' : 'Please verify email');
@@ -468,25 +501,64 @@ export default function Index() {
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>{t.verifyEmail}</DialogTitle>
-                      <DialogDescription>{t.enterCode}</DialogDescription>
+                      <DialogDescription>
+                        {verifyMode === 'code' ? t.enterCode : t.enterPasswordToVerify}
+                      </DialogDescription>
                     </DialogHeader>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const formData = new FormData(e.currentTarget);
-                        handleVerify(formData.get('code') as string);
-                      }}
-                    >
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="verify-code">{t.verificationCode}</Label>
-                          <Input id="verify-code" name="code" required maxLength={6} />
+                    
+                    {verifyMode === 'code' ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          handleVerify(formData.get('code') as string);
+                        }}
+                      >
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="verify-code">{t.verificationCode}</Label>
+                            <Input id="verify-code" name="code" required maxLength={6} />
+                          </div>
+                          <Button type="submit" className="w-full">
+                            {t.verify}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="w-full"
+                            onClick={() => setVerifyMode('password')}
+                          >
+                            {t.noCode}
+                          </Button>
                         </div>
-                        <Button type="submit" className="w-full">
-                          {t.verify}
-                        </Button>
-                      </div>
-                    </form>
+                      </form>
+                    ) : (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          handleVerifyWithPassword(formData.get('password') as string);
+                        }}
+                      >
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="verify-password">{t.password}</Label>
+                            <Input id="verify-password" name="password" type="password" required />
+                          </div>
+                          <Button type="submit" className="w-full">
+                            {t.usePassword}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="w-full"
+                            onClick={() => setVerifyMode('code')}
+                          >
+                            {t.enterCode}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
                   </DialogContent>
                 </Dialog>
 
